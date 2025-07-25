@@ -22,9 +22,11 @@
     <iframe
       id="inlineFrameExample"
       title="Inline Frame Example"
-      src="/pages/home-p9">
+      src="{% if not localURL %}/proxy?url={% endif %}{{ frameURL }}">
     </iframe>
   </div>
+
+  <p class="nhsuk-u-font-size-14" style="text-align: center;"><a href="frame-launcher">Open a different URL in this frame</a></p>
 
 {% endblock %}
 
