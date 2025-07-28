@@ -13,8 +13,6 @@
 {% block content %}
 
   <div class="nhsuk-u-reading-width">
-
-    {# <h1 class="nhsuk-heading-l">Open a URL in the NHS App frame</h1> #}
   
     <form action="frame" method="post">
       {{ input({
@@ -26,7 +24,7 @@
           classes: "nhsuk-label--m"
         },
         hint: {
-          text: 'Type the web address of page you wish to open in the NHS App frame, <br> for example: https://111.nhs.uk or localhost:3001' | safe
+          text: 'Type the web address of page you wish to open in the NHS App frame, <br> for example localhost:3001 or the full address of your prototype' | safe
         },
         classes: "nhsuk-input--width-30 nhsuk-u-margin-bottom-3"
       }) }}

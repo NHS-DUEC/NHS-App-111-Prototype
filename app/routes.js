@@ -44,129 +44,86 @@ function isLocalURL(url) {
  * If the URL is not valid, it returns a 400 status with an error message. 
  * If the URL is local, it will be loaded directly; otherwise, it will be proxied through the server.
  */
-// router.all('/proxy', (req, res) => {
-//     const url = req.query.url;
-    
-//     // Validation
-//     if (!url) return res.status(400).send('Missing URL');
-//     if (!isValidURL(url)) return res.status(400).send('Invalid URL');
-
-//     // Proxy request setup
-//     const proxyRequest = request.get({
-//         url,
-//         headers: {
-//             'User-Agent': config.frame.userAgent
-//         }
-//     });
-
-//     // Handle proxy response
-//     proxyRequest.on('response', response => {
-//         // Clean headers
-//         for (const header of config.frame.proxyHeaders) {
-//             delete response.headers[header];
-//         }
-
-//         const contentType = response.headers['content-type'] || '';
-        
-//         // Handle HTML content
-//         if (contentType.includes('text/html')) {
-//             let body = '';
-            
-//             response.on('data', chunk => body += chunk);
-            
-//             response.on('end', () => {
-//                 // Rewrite root-relative URLs
-//                 const baseProxy = `/proxy?url=${encodeURIComponent(new URL('/', url).origin)}`;
-//                 body = body.replace(/(href|src|action)=["']\/(?!\/)/gi, `$1="${baseProxy}/`);
-                
-//                 res.set('content-type', contentType);
-//                 res.send(body);
-//             });
-//         } else {
-//             // Pass through non-HTML content
-//             response.pipe(res);
-//         }
-//     });
-
-//     // Handle errors
-//     proxyRequest.on('error', err => {
-//         res.status(500).send('Proxy error');
-//     });
-// });
-
 router.all('/proxy', (req, res) => {
     const url = req.query.url;
 
-    // Validation
     if (!url) return res.status(400).send('Missing URL');
     if (!isValidURL(url)) return res.status(400).send('Invalid URL');
 
     const parsedUrl = new URL(url);
 
-    // Prepare headers for the proxied request
     const headers = {
         ...req.headers,
         'User-Agent': config.frame.userAgent,
         host: parsedUrl.host
     };
 
-    delete headers['content-length']; // Let request compute this
+    delete headers['content-length'];
 
     const options = {
         url,
         method: req.method,
         headers,
         followRedirect: false,
-        encoding: null // ensures we get buffer if binary
+        encoding: null // important for binary safety
     };
 
-    const proxyRequest = request(options, (error, response, bodyBuffer) => {
-        if (error) return res.status(500).send('Proxy error');
+    const chunks = [];
+    const proxyRequest = request(options);
 
-        // Clean headers
+    proxyRequest.on('response', proxyRes => {
+        // Remove unwanted headers
         for (const header of config.frame.proxyHeaders) {
-            delete response.headers[header];
+            delete proxyRes.headers[header];
         }
 
-        const contentType = response.headers['content-type'] || '';
+        const contentType = proxyRes.headers['content-type'] || '';
 
-        if (contentType.includes('text/html')) {
+        proxyRes.on('data', chunk => chunks.push(chunk));
+        proxyRes.on('end', () => {
+            const buffer = Buffer.concat(chunks);
 
-            let body = bodyBuffer.toString('utf8');
-            const origin = new URL(url).origin;
+            if (contentType.includes('text/html')) {
+                let body = buffer.toString('utf8');
+                const origin = parsedUrl.origin;
 
-            // Rewrite action="/..." to absolute proxied URL
-            body = body.replace(/action=["'](\/[^"']*)["']/gi, (match, path) => {
-                const fullUrl = new URL(path, origin).href;
-                return `action="/proxy?url=${encodeURIComponent(fullUrl)}"`;
-            });
+                // Rewrite action
+                body = body.replace(/action=["'](\/[^"']*)["']/gi, (match, path) => {
+                    const fullUrl = new URL(path, origin).href;
+                    return `action="/proxy?url=${encodeURIComponent(fullUrl)}"`;
+                });
 
-            // Rewrite href="/..." to absolute proxied URL
-            body = body.replace(/href=["'](\/[^"']*)["']/gi, (match, path) => {
-                const fullUrl = new URL(path, origin).href;
-                return `href="/proxy?url=${encodeURIComponent(fullUrl)}"`;
-            });
+                // Rewrite href
+                body = body.replace(/href=["'](\/[^"']*)["']/gi, (match, path) => {
+                    const fullUrl = new URL(path, origin).href;
+                    return `href="/proxy?url=${encodeURIComponent(fullUrl)}"`;
+                });
 
-            // Rewrite src="/..." to absolute proxied URL
-            body = body.replace(/src=["'](\/[^"']*)["']/gi, (match, path) => {
-                const fullUrl = new URL(path, origin).href;
-                return `src="/proxy?url=${encodeURIComponent(fullUrl)}"`;
-            });
+                // Rewrite src
+                body = body.replace(/src=["'](\/[^"']*)["']/gi, (match, path) => {
+                    const fullUrl = new URL(path, origin).href;
+                    return `src="/proxy?url=${encodeURIComponent(fullUrl)}"`;
+                });
 
-            res.set('content-type', contentType);
-            res.status(response.statusCode).send(body);
-        } else {
-            // Pipe headers and raw content
-            res.set(response.headers);
-            res.status(response.statusCode).send(bodyBuffer);
-        }
+                res.set('content-type', contentType);
+                res.status(proxyRes.statusCode).send(body);
+            } else {
+                // For binary or non-HTML content
+                res.set(proxyRes.headers);
+                res.status(proxyRes.statusCode).send(buffer);
+            }
+        });
     });
 
-    // Pipe body from original request (for POST, PUT, etc.)
-    req.pipe(proxyRequest).on('error', () => {
+    proxyRequest.on('error', err => {
+        console.error(err);
         res.status(500).send('Proxy error');
     });
+
+    // Forward the request body
+    req.pipe(proxyRequest);
 });
+
 
 /**
  * Route to render the frame launcher page.
@@ -174,7 +131,9 @@ router.all('/proxy', (req, res) => {
  * It validates the URL and redirects to the frame view with the provided URL.
  */
 router.all('/frame', (req, res) => {
-    let { frameURL } = req.body;
+
+    // Accept from querystring as `URL` or from form body as `frameURL`
+    let frameURL = req.query.URL || req.body.frameURL;
     const requestPort = req.socket.localPort;
     const serverPort = process.env.PORT;
     let showOverlay = requestPort !== serverPort;

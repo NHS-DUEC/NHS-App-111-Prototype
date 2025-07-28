@@ -62,6 +62,12 @@ html:has(.app-iframe__page){
   }
 
   // overlays the iframe with the header and bottom navigation
+  // adjustments are required because styles are applied to the containing page
+  // not applied to the child iframe
+  // this is a workaround to avoid the iframe being covered by the header and bottom navigation
+  // the iframe is positioned absolutely within the container
+  // and the header and bottom navigation are positioned absolutely within the container
+  // so that they overlay the iframe
   &--overlay {
     iframe {
       $topOffset: $notch-height + $header-height + 12px;
