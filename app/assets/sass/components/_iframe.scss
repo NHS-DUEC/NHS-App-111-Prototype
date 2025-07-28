@@ -64,7 +64,7 @@ html:has(.app-iframe__page){
   // overlays the iframe with the header and bottom navigation
   &--overlay {
     iframe {
-      $topOffset: $notch-height + $header-height;
+      $topOffset: $notch-height + $header-height + 12px;
       $heightOffset: calc(100% - #{$bottom-nav-height} - #{$header-height} - #{$notch-height});
       top: $topOffset;
       height: $heightOffset;
@@ -72,11 +72,21 @@ html:has(.app-iframe__page){
     .app-bottom-navigation,
     .app-global-navigation-native {
       position: absolute;
+      .nhsuk-width-container {
+        @include nhsuk-responsive-margin(3,"left");
+        @include nhsuk-responsive-margin(3,"right");
+      }
     }
     .app-global-navigation-native {
       top: $notch-height;
       width: 100%;
-      padding-right: 1em;
+      padding: 0;
+    }
+    .app-bottom-navigation {
+      width: 100%;
+      &__label {
+        font-size: 12px !important
+      }
     }
   }
 

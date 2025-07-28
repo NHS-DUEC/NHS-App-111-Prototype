@@ -3,7 +3,9 @@ const request = require('request');
 const router = express.Router();
 const config = require('../app/config');
 
-/** * Validates if the provided string is a valid URL.
+// URL Validation Functions
+/** 
+ * Validates if the provided string is a valid URL.
  * It checks if the string is non-empty, is a string, and can be parsed as a URL.
  * It also ensures that the URL uses either the 'http' or 'https' protocol.
  * @param {string} str - The string to validate as a URL.
@@ -35,6 +37,7 @@ function isLocalURL(url) {
     }
 }
 
+// Route Handlers
 /**
  * Route to render the page within the frame.
  * It checks if the URL is valid and local, then renders the frame view.
@@ -43,37 +46,50 @@ function isLocalURL(url) {
  */
 router.get('/proxy', (req, res) => {
     const url = req.query.url;
+    
+    // Validation
     if (!url) return res.status(400).send('Missing URL');
     if (!isValidURL(url)) return res.status(400).send('Invalid URL');
-    request.get({
+
+    // Proxy request setup
+    const proxyRequest = request.get({
         url,
         headers: {
             'User-Agent': config.frame.userAgent
         }
-    })
-    .on('response', response => {
+    });
+
+    // Handle proxy response
+    proxyRequest.on('response', response => {
+        // Clean headers
         for (const header of config.frame.proxyHeaders) {
-            // Remove headers that could interfere with the frame rendering
-            delete response.headers[header]; // eslint-disable-line no-param-reassign   
+            delete response.headers[header];
         }
 
-        // Intercept HTML content to rewrite root-relative links
         const contentType = response.headers['content-type'] || '';
+        
+        // Handle HTML content
         if (contentType.includes('text/html')) {
             let body = '';
+            
             response.on('data', chunk => body += chunk);
+            
             response.on('end', () => {
-                // Rewrite root-relative URLs in href/src/action attributes
+                // Rewrite root-relative URLs
                 const baseProxy = `/proxy?url=${encodeURIComponent(new URL('/', url).origin)}`;
                 body = body.replace(/(href|src|action)=["']\/(?!\/)/gi, `$1="${baseProxy}/`);
+                
                 res.set('content-type', contentType);
                 res.send(body);
             });
         } else {
+            // Pass through non-HTML content
             response.pipe(res);
         }
-    })
-    .on('error', err => {
+    });
+
+    // Handle errors
+    proxyRequest.on('error', err => {
         res.status(500).send('Proxy error');
     });
 });
@@ -85,24 +101,48 @@ router.get('/proxy', (req, res) => {
  */
 router.all('/frame', (req, res) => {
     let { frameURL } = req.body;
-
     const requestPort = req.socket.localPort;
     const serverPort = process.env.PORT;
-    const samePort = requestPort === serverPort;
-    let showOverlay = !samePort || !isLocalURL(frameURL);
+    let showOverlay = requestPort !== serverPort;
 
-    if (typeof frameURL !== 'string' || frameURL == null || frameURL.trim() === '' || !frameURL) {
-        frameURL = '/pages/home-p9'; // Default URL if none provided
+    // if no URL is provided, use the default URL
+    if (!frameURL || typeof frameURL !== 'string' || frameURL.trim() === '') {
+        frameURL = config.frame.defaultURL || '/pages/home-p9';
         showOverlay = false;
-    };
-    // Ensure the URL starts with 'http://' or 'https://', or is a root-relative path
-    if (typeof frameURL === 'string' && frameURL.startsWith('/')) {
-        const host = req.headers.host;
-        frameURL = `http://${host}${frameURL}`;
-        showOverlay = false; // No overlay for local URLs
     }
-    if (!isValidURL(frameURL)) return res.status(400).send('A valid URL is required');
-    res.render('frame', { frameURL, localURL: isLocalURL(frameURL), showOverlay });
+
+    // Handle root-relative paths adding the server host
+    if (typeof frameURL === 'string' && frameURL.startsWith('/')) {
+        frameURL = `http://${req.headers.host}${frameURL}`;
+        showOverlay = false;
+    }
+
+    // Ensure the URL starts with http:// or https://
+    // If it doesn't, prepend http://
+    // This is necessary for the URL to be valid and to avoid issues with the iframe
+    // Note: This does not validate the URL, it just ensures it has a protocol
+    // This is important for the iframe to load correctly
+    // If the URL is a local URL, it will not be handled by the proxy
+    // If the URL is not a local URL, it will be proxied through the server
+    if (
+        typeof frameURL === 'string' &&
+        !frameURL.startsWith('http://') &&
+        !frameURL.startsWith('https://') &&
+        !frameURL.startsWith('/')
+    ) {
+        frameURL = `http://${frameURL}`;
+    }
+
+    // Validation and rendering
+    if (!isValidURL(frameURL)) {
+        return res.status(400).send('A valid URL is required');
+    }
+
+    res.render('frame', {
+        frameURL,
+        localURL: isLocalURL(frameURL),
+        showOverlay
+    });
 });
 
 module.exports = router;
