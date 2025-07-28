@@ -58,6 +58,26 @@ html:has(.app-iframe__page){
     &::-webkit-scrollbar {
       display: none;  /* Chrome, Safari and Opera */
     }
+
+  }
+
+  // overlays the iframe with the header and bottom navigation
+  &--overlay {
+    iframe {
+      $topOffset: $notch-height + $header-height;
+      $heightOffset: calc(100% - #{$bottom-nav-height} - #{$header-height} - #{$notch-height});
+      top: $topOffset;
+      height: $heightOffset;
+    }
+    .app-bottom-navigation,
+    .app-global-navigation-native {
+      position: absolute;
+    }
+    .app-global-navigation-native {
+      top: $notch-height;
+      width: 100%;
+      padding-right: 1em;
+    }
   }
 
   .ios-notch {
@@ -70,4 +90,5 @@ html:has(.app-iframe__page){
     z-index: 10;
     fill: black;
   }
+
 }

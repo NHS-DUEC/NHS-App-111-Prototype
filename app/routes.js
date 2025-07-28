@@ -83,18 +83,26 @@ router.get('/proxy', (req, res) => {
  * This page allows users to input a URL to be loaded in the frame.
  * It validates the URL and redirects to the frame view with the provided URL.
  */
-router.post('/frame', (req, res) => {
+router.all('/frame', (req, res) => {
     let { frameURL } = req.body;
-    if (typeof frameURL !== 'string' || frameURL == null || frameURL.trim() === '') {
+
+    const requestPort = req.socket.localPort;
+    const serverPort = process.env.PORT;
+    const samePort = requestPort === serverPort;
+    let showOverlay = !samePort || !isLocalURL(frameURL);
+
+    if (typeof frameURL !== 'string' || frameURL == null || frameURL.trim() === '' || !frameURL) {
         frameURL = '/pages/home-p9'; // Default URL if none provided
+        showOverlay = false;
     };
     // Ensure the URL starts with 'http://' or 'https://', or is a root-relative path
     if (typeof frameURL === 'string' && frameURL.startsWith('/')) {
         const host = req.headers.host;
         frameURL = `http://${host}${frameURL}`;
+        showOverlay = false; // No overlay for local URLs
     }
     if (!isValidURL(frameURL)) return res.status(400).send('A valid URL is required');
-    res.render('frame', { frameURL, localURL: isLocalURL(frameURL) });
+    res.render('frame', { frameURL, localURL: isLocalURL(frameURL), showOverlay });
 });
 
 module.exports = router;

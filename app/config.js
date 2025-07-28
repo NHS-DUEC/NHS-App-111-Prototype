@@ -15,6 +15,7 @@ module.exports = {
   useCookieSessionStore: 'false',
 
   frame: {
+    defaultURL: '/pages/home-p9',
     userAgent: 'Mozilla/5.0 (Linux; Android 10; Pixel 2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.5735.199 Mobile Safari/537.36 nhsapp-android/1.26.2',
     localURLs: ['localhost', '127.0.1', '::1', 'nhs-app-111-prototype'],
     proxyHeaders: [

@@ -14,16 +14,22 @@
 
 {% block content %}
 
-  <div class="app-iframe__container">
+  <div class="app-iframe__container {{- ' app-iframe__container--overlay' if showOverlay }}">
     <div class="app-iframe__header"></div>
     <svg class="ios-notch" viewBox="-40 0 300 31">
       <path d="M0 1V0h219v1a5 5 0 0 0-5 5v3c0 12.15-9.85 22-22 22H27C14.85 31 5 21.15 5 9V6a5 5 0 0 0-5-5z" fill-rule="evenodd"></path>
     </svg>
+    {% if showOverlay %}
+     {% include "components/global-navigation-native/include.html" %}
+    {% endif %}
     <iframe
       id="inlineFrameExample"
       title="Inline Frame Example"
-      src="{% if not localURL %}/proxy?url={% endif %}{{ frameURL }}">
+      src="{% if not localURL %}/proxy?url={{ frameURL }}{% else %}{{ frameURL }}{% endif %}">
     </iframe>
+    {% if showOverlay %}
+      {% include "components/app-bottom-navigation/include.html" %}
+    {% endif %}
   </div>
 
   <p class="nhsuk-u-font-size-14" style="text-align: center;"><a href="frame-launcher">Open a different URL in this frame</a></p>
