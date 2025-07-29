@@ -64,7 +64,7 @@ router.all('/proxy', (req, res) => {
         url,
         method: req.method,
         headers,
-        followRedirect: false,
+        followRedirect: true,
         encoding: null // important for binary safety
     };
 
@@ -83,35 +83,105 @@ router.all('/proxy', (req, res) => {
         proxyRes.on('end', () => {
             const buffer = Buffer.concat(chunks);
 
+            // Handle HTTP redirect after form POST (e.g. 302, 303, 307, 308)
+            if (
+                [301, 302, 303, 307, 308].includes(proxyRes.statusCode) &&
+                proxyRes.headers['location']
+            ) {
+                let location = proxyRes.headers['location'];
+                try {
+                    // If relative, resolve against the original URL
+                    location = new URL(location, parsedUrl).href;
+                } catch {
+                    // fallback: leave as is
+                }
+                // Only redirect if status code is valid and location is a valid URL
+                if (
+                    typeof proxyRes.statusCode === 'number' &&
+                    proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 &&
+                    typeof location === 'string' && location
+                ) {
+                    return res.redirect(proxyRes.statusCode, `/proxy?url=${encodeURIComponent(location)}`);
+                } else {
+                    // fallback: just send the body as-is
+                    res.set('content-type', contentType);
+                    return res.status(200).send(buffer.toString('utf8'));
+                }
+            }
+
             if (contentType.includes('text/html')) {
                 let body = buffer.toString('utf8');
                 const origin = parsedUrl.origin;
 
+                console.log(origin, 'origin');
+
+                // Helper to rewrite URLs for proxying
+                function rewriteUrl(attr, value) {
+                    try {
+                        // Ignore anchors, javascript:, mailto:, tel:, etc.
+                        if (
+                            !value ||
+                            typeof value !== 'string' ||
+                            value.startsWith('#') ||
+                            value.startsWith('javascript:') ||
+                            value.startsWith('mailto:') ||
+                            value.startsWith('tel:')
+                        ) {
+                            return value;
+                        }
+                        // If already proxied, don't double-proxy
+                        if (value.startsWith('/proxy?url=')) {
+                            return value;
+                        }
+                        // Absolute URL
+                        if (/^https?:\/\//i.test(value)) {
+                            return `/proxy?url=${encodeURIComponent(value)}`;
+                        }
+                        // Protocol-relative URL (e.g. //example.com)
+                        if (/^\/\//.test(value)) {
+                            return `/proxy?url=${encodeURIComponent(parsedUrl.protocol + value)}`;
+                        }
+                        // Root-relative or relative URL
+                        // Use parsedUrl.href (full URL including path) as base
+                        const fullUrl = new URL(value, parsedUrl.href).href;
+                        return `/proxy?url=${encodeURIComponent(fullUrl)}`;
+                    } catch {
+                        return value;
+                    }
+                }
+
                 // Rewrite action
-                body = body.replace(/action=["'](\/[^"']*)["']/gi, (match, path) => {
-                    const fullUrl = new URL(path, origin).href;
-                    return `action="/proxy?url=${encodeURIComponent(fullUrl)}"`;
+                body = body.replace(/action=["']([^"']+)["']/gi, (match, url) => {
+                    let proxiedUrl;
+                    try {
+                        proxiedUrl = new URL(url, parsedUrl.href).href;
+                    } catch {
+                        proxiedUrl = url;
+                    }
+                    // Only rewrite if the URL is valid
+                    if (!proxiedUrl || typeof proxiedUrl !== 'string') return match;
+                    return `action="/proxy?url=${encodeURIComponent(proxiedUrl)}"`;
                 });
 
-                // Rewrite href
-                body = body.replace(/href=["'](\/[^"']*)["']/gi, (match, path) => {
-                    const fullUrl = new URL(path, origin).href;
-                    return `href="/proxy?url=${encodeURIComponent(fullUrl)}"`;
+                // Rewrite href only on anchor tags
+                body = body.replace(/<a([^>]+)href=["']([^"']+)["']/gi, (match, pre, url) => {
+                    return `<a${pre}href="${rewriteUrl('href', url)}"`;
                 });
 
                 // Rewrite src
-                body = body.replace(/src=["'](\/[^"']*)["']/gi, (match, path) => {
-                    const fullUrl = new URL(path, origin).href;
-                    return `src="/proxy?url=${encodeURIComponent(fullUrl)}"`;
+                body = body.replace(/src=["']([^"']+)["']/gi, (match, url) => {
+                    return `src="${rewriteUrl('src', url)}"`;
                 });
 
                 res.set('content-type', contentType);
                 res.status(proxyRes.statusCode).send(body);
+
             } else {
                 // For binary or non-HTML content
                 res.set(proxyRes.headers);
                 res.status(proxyRes.statusCode).send(buffer);
             }
+
         });
     });
 

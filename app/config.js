@@ -26,7 +26,8 @@ module.exports = {
       'access-control-allow-origin',
       'access-control-allow-credentials',
       'x-frame-options',
-      'content-security-policy'
+      'content-security-policy',
+      'strict-origin-when-cross-origin'
     ]
   }
 

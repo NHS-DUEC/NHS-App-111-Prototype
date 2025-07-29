@@ -21,17 +21,43 @@
         label: {
           text: "Enter a URL",
           isPageHeading: true,
-          classes: "nhsuk-label--m"
+          classes: "nhsuk-label--l"
         },
         hint: {
-          text: 'Type the web address of page you wish to open in the NHS App frame, <br> for example localhost:3001 or the full address of your prototype' | safe
+          text: 'Type the address of page you wish to open in the NHS App frame, <br> for example localhost:3000 or the full address of your prototype' | safe
         },
-        classes: "nhsuk-input--width-30 nhsuk-u-margin-bottom-3"
+        classes: "nhsuk-input--width-30 nhsuk-u-margin-bottom-2"
       }) }}
       {{ button({
         text: "Open URL"
       }) }}
     </form>
+
+    {{ insetText({
+      text: 'This feature is experimental. Some URLs will not load for secruity'
+    }) }}
+
+    <h1 class="nhsuk-heading-m">
+      Some examples
+    </h1>
+
+    {{ contentsList({
+      items: [
+        {
+          text: "NHSUK",
+          href: "/frame?URL=https://www.nhs.uk"
+        },
+        {
+          text: "111 online",
+          href: "/frame?URL=https://111.nhs.uk"
+        },
+        {
+          text: "App home screen",
+          href: "/frame?URL=/pages/home-p9"
+        }
+      ]
+    }) }}
+
 
   </div>
 
